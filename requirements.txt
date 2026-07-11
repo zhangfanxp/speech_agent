@@ -1,0 +1,37 @@
+# ==================================
+# Speech Agent for Apple Silicon
+# M4 Mac optimized
+# ==================================
+
+
+# MLX LLM
+mlx-lm>=0.25.0
+
+
+# MLX Audio
+mlx-audio>=0.2.0
+
+
+# Audio
+sounddevice
+soundfile
+numpy
+
+
+# VAD
+silero-vad
+onnxruntime-silicon
+
+
+# HTTP API
+requests
+
+
+# PyTorch
+torch
+
+
+# HuggingFace
+huggingface-hub
+transformers
+accelerate
