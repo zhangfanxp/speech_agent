@@ -329,39 +329,4 @@ License
 
 MIT License
 
-
----
-
-## 我建议你再补两个小文件
-
-你的 GitHub 项目会更完整：
-
-### 1. `start_llm.sh`
-
-```bash
-#!/bin/bash
-
-mlx_lm.server \
---model mlx-community/Qwen3-4B-4bit \
---host 0.0.0.0 \
---port 8000
-2. run_agent.sh
-#!/bin/bash
-
-source .venv/bin/activate
-
-python app.py
-
-然后：
-
-chmod +x *.sh
-
-以后别人运行：
-
-终端1：
-
-./start_llm.sh
-
-终端2：
-
 ./run_agent.sh
