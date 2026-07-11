@@ -134,7 +134,7 @@ cd speech_agent
 
 Create virtual environment:
 
-uv venv
+uv venv  --python 3.11
 
 Activate:
 
