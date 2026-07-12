@@ -102,6 +102,116 @@ EXIT_COMMANDS = [
 
 
 
+# =====================================
+# 耗时日志
+# =====================================
+
+
+def now():
+
+
+    return time.perf_counter()
+
+
+
+def format_seconds(seconds):
+
+
+    return f"{seconds:.2f}s"
+
+
+
+def log_duration(label, seconds):
+
+
+    print(
+
+        f"⏱ {label}: {format_seconds(seconds)}"
+
+    )
+
+
+
+def print_turn_timing(timing):
+
+
+    total = timing["play_end"] - timing["turn_start"]
+
+
+    response_latency = timing["play_start"] - timing["record_end"]
+
+
+    print(
+
+        "\n⏱ 本轮耗时统计"
+
+    )
+
+
+    print(
+
+        "- 录音阶段:",
+
+        format_seconds(timing["record_end"] - timing["turn_start"])
+
+    )
+
+
+    print(
+
+        "- ASR识别:",
+
+        format_seconds(timing["asr_end"] - timing["record_end"])
+
+    )
+
+
+    print(
+
+        "- LLM生成:",
+
+        format_seconds(timing["llm_end"] - timing["asr_end"])
+
+    )
+
+
+    print(
+
+        "- TTS合成:",
+
+        format_seconds(timing["tts_end"] - timing["llm_end"])
+
+    )
+
+
+    print(
+
+        "- 音频播放:",
+
+        format_seconds(timing["play_end"] - timing["play_start"])
+
+    )
+
+
+    print(
+
+        "- 用户说完到开始播放:",
+
+        format_seconds(response_latency)
+
+    )
+
+
+    print(
+
+        "- 本轮总耗时:",
+
+        format_seconds(total)
+
+    )
+
+
+
 
 
 # =====================================
@@ -116,7 +226,7 @@ vad_model = load_silero_vad()
 
 
 
-print("加载 Whisper...")
+print("加载 Qwen3-ASR...")
 
 
 asr_model = load_asr_model(
@@ -174,6 +284,12 @@ def record_audio_vad():
 
     chunk_size = 512
 
+
+
+    record_start = now()
+
+
+    speech_start = None
 
 
     start_time = time.time()
@@ -255,6 +371,8 @@ def record_audio_vad():
                             "检测到讲话"
 
                         )
+
+                        speech_start = now()
 
 
                     started = True
@@ -340,6 +458,49 @@ def record_audio_vad():
 
     )
 
+
+    audio_duration = len(audio_data) / SAMPLE_RATE
+
+
+    record_elapsed = now() - record_start
+
+
+    if speech_start is None:
+
+
+        wait_elapsed = record_elapsed
+
+
+    else:
+
+
+        wait_elapsed = speech_start - record_start
+
+
+    log_duration(
+
+        "等待开口",
+
+        wait_elapsed
+
+    )
+
+
+    log_duration(
+
+        "录音阶段总耗时",
+
+        record_elapsed
+
+    )
+
+
+    print(
+
+        f"⏱ 录音音频长度: {format_seconds(audio_duration)}"
+
+    )
+
 # =====================================
 # ASR 语音识别
 # =====================================
@@ -355,10 +516,17 @@ def speech_to_text():
     )
 
 
+    asr_start = now()
+
+
 
     result = asr_model.generate(
 
-        "input.wav"
+        "input.wav",
+
+        language="Chinese",
+
+        verbose=False
 
     )
 
@@ -373,6 +541,15 @@ def speech_to_text():
         "用户:",
 
         text
+
+    )
+
+
+    log_duration(
+
+        "ASR识别耗时",
+
+        now() - asr_start
 
     )
 
@@ -423,6 +600,9 @@ def chat(text):
         "🧠 AI生成回答..."
 
     )
+
+
+    llm_start = now()
 
 
 
@@ -556,6 +736,15 @@ def chat(text):
     )
 
 
+    log_duration(
+
+        "LLM生成耗时",
+
+        now() - llm_start
+
+    )
+
+
 
     return answer
 
@@ -577,6 +766,9 @@ def text_to_speech(text):
         "🔊 生成语音..."
 
     )
+
+
+    tts_start = now()
 
 
 
@@ -663,6 +855,15 @@ def text_to_speech(text):
     )
 
 
+    log_duration(
+
+        "TTS合成总耗时",
+
+        now() - tts_start
+
+    )
+
+
 
     return output_file
 
@@ -688,6 +889,9 @@ def play_audio(file):
     )
 
 
+    play_start = now()
+
+
 
     subprocess.run(
 
@@ -698,6 +902,15 @@ def play_audio(file):
             file
 
         ]
+
+    )
+
+
+    log_duration(
+
+        "音频播放耗时",
+
+        now() - play_start
 
     )
 
@@ -721,15 +934,31 @@ def main():
 
 
 
+            timing = {
+
+                "turn_start": now()
+
+            }
+
+
+
             # 等待讲话
 
             record_audio_vad()
 
 
 
+            timing["record_end"] = now()
+
+
+
             # ASR
 
             text = speech_to_text()
+
+
+
+            timing["asr_end"] = now()
 
 
 
@@ -770,6 +999,10 @@ def main():
 
 
 
+                timing["llm_end"] = timing["asr_end"]
+
+
+
                 audio = text_to_speech(
 
                     goodbye
@@ -777,9 +1010,25 @@ def main():
                 )
 
 
+                timing["tts_end"] = now()
+
+
+                timing["play_start"] = now()
+
+
                 play_audio(
 
                     audio
+
+                )
+
+
+                timing["play_end"] = now()
+
+
+                print_turn_timing(
+
+                    timing
 
                 )
 
@@ -808,6 +1057,10 @@ def main():
 
 
 
+            timing["llm_end"] = now()
+
+
+
             if answer:
 
 
@@ -818,9 +1071,25 @@ def main():
                 )
 
 
+                timing["tts_end"] = now()
+
+
+                timing["play_start"] = now()
+
+
                 play_audio(
 
                     audio
+
+                )
+
+
+                timing["play_end"] = now()
+
+
+                print_turn_timing(
+
+                    timing
 
                 )
 
@@ -874,4 +1143,3 @@ if __name__ == "__main__":
 
 
     main()
-

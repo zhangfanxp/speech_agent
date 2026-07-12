@@ -22,7 +22,7 @@ LLM_MODEL = (
 
 ASR_MODEL = (
     "mlx-community/"
-    "whisper-large-v3-turbo-asr-fp16"
+    "Qwen3-ASR-1.7B-8bit"
 )
 
 

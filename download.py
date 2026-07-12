@@ -21,7 +21,7 @@ MODELS = [
 "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit",
 
 
-"mlx-community/whisper-large-v3-turbo-asr-fp16"
+"mlx-community/Qwen3-ASR-1.7B-8bit"
 
 
 ]

@@ -10,7 +10,7 @@ A local AI voice assistant optimized for Apple Silicon Mac.
 - 🎤 Real-time voice conversation
 - 🧠 Local LLM inference
 - 🔊 Chinese speech synthesis
-- 📝 Whisper speech recognition
+- 📝 Qwen3-ASR speech recognition
 - ⚡ Silero VAD automatic voice detection
 - 🔒 Fully local deployment
 - 🚀 Optimized for Apple Silicon
@@ -27,7 +27,7 @@ Silero VAD
 
 ↓
 
-Whisper ASR
+Qwen3-ASR
 
 ↓
 
@@ -86,7 +86,7 @@ mlx-community/Qwen3-4B-4bit
 ## Speech Recognition
 
 
-mlx-community/whisper-large-v3-turbo-asr-fp16
+mlx-community/Qwen3-ASR-1.7B-8bit
 
 
 
@@ -156,11 +156,11 @@ Qwen3-4B-4bit
 
 Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit
 
-whisper-large-v3-turbo-asr-fp16
+Qwen3-ASR-1.7B-8bit
 
 Model size:
 
-approximately 8GB-10GB.
+approximately 9GB-12GB.
 
 Configure Microphone
 
