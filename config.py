@@ -241,10 +241,29 @@ TTS_LANGUAGE = "zh"
 
 # TTS 采样参数。温度越高，声音变化越大；越低越稳定。
 
-TTS_TEMPERATURE = 0.1
+TTS_TEMPERATURE = 0.3
+
+
+# 限制采样范围并惩罚重复 token，降低“知知知”这类重复音频风险。
+
+TTS_TOP_K = 50
+
+
+TTS_TOP_P = 0.9
+
+
+TTS_REPETITION_PENALTY = 1.2
 
 
 TTS_MAX_TOKENS = 1200
+
+
+# 单次回复最多生成多少秒音频。
+# 注意：这是“生成出来的音频总长度”上限，不是等待超时。
+# 如果回答较长、朗读诗词或文章，这个值太小会导致音频没播完就被主动截断。
+# 如果 TTS 偶发重复生成，可以适当调小；如果经常朗读长文本，可以调大。
+
+TTS_MAX_AUDIO_SECONDS = 60
 
 
 # 是否启用 TTS 流式合成 + 播放
@@ -264,13 +283,24 @@ TTS_STREAMING_INTERVAL = 0.8
 TTS_STREAM_MIN_BUFFER_SECONDS = 0.5
 
 
-# 流式 TTS 防卡死保护。
-# 如果 TTS 生成或播放偶发卡住，超过这些时间后会自动结束本轮。
+# 流式 TTS 生成阶段防卡死保护。
+# 含义：从开始调用 TTS 到持续产出音频块的最长等待时间。
+# 如果 TTS 模型卡住、一直不结束，超过这个时间会停止本轮生成。
 
 TTS_STREAM_TIMEOUT_SECONDS = 30
 
 
-TTS_STREAM_DRAIN_TIMEOUT_SECONDS = 15
+# 流式播放 drain 阶段基础等待时间。
+# 含义：TTS 已经停止生成后，播放器继续把缓冲区里已生成的音频播完，
+# 最少允许等待这么久。
+
+TTS_STREAM_DRAIN_TIMEOUT_SECONDS = 60
+
+
+# 播放 drain 等待会根据剩余缓冲音频自动加时。
+# 实际等待时间 = max(TTS_STREAM_DRAIN_TIMEOUT_SECONDS, 剩余缓冲秒数 + 这个额外余量)
+
+TTS_STREAM_DRAIN_TIMEOUT_EXTRA_SECONDS = 5
 
 
 

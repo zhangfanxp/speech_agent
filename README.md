@@ -165,7 +165,7 @@ Voice style instruction:
 
 ```python
 TTS_INSTRUCT = (
-    "始终使用同一个稳定的中文女声音色说话，"
+    "始终使用同一个稳定的中文声音色说话，"
     "语速适中，语调平稳，不要夸张，不要改变情绪，"
     "保持自然、清楚、亲切。"
 )
@@ -175,6 +175,10 @@ For more stable voice output, lower temperature is recommended:
 
 ```python
 TTS_TEMPERATURE = 0.3
+TTS_TOP_K = 50
+TTS_TOP_P = 0.9
+TTS_REPETITION_PENALTY = 1.2
+TTS_MAX_AUDIO_SECONDS = 60
 ```
 
 Streaming TTS is enabled by default:
@@ -184,12 +188,13 @@ TTS_STREAM = True
 TTS_STREAMING_INTERVAL = 0.8
 TTS_STREAM_MIN_BUFFER_SECONDS = 0.5
 TTS_STREAM_TIMEOUT_SECONDS = 30
-TTS_STREAM_DRAIN_TIMEOUT_SECONDS = 15
+TTS_STREAM_DRAIN_TIMEOUT_SECONDS = 60
+TTS_STREAM_DRAIN_TIMEOUT_EXTRA_SECONDS = 5
 ```
 
 If playback is choppy, increase `TTS_STREAM_MIN_BUFFER_SECONDS` to `0.8` or `1.0`.
 
-If streaming TTS occasionally hangs, the timeout settings above will stop the current playback round and return the assistant to listening mode.
+If streaming TTS occasionally hangs, the timeout settings above will stop the current playback round and return the assistant to listening mode. For long answers, `TTS_MAX_AUDIO_SECONDS` controls the maximum generated audio length, while `TTS_STREAM_DRAIN_TIMEOUT_SECONDS` controls how long the player can wait for already buffered audio to finish.
 
 ## Configure microphone
 
@@ -305,9 +310,15 @@ curl http://localhost:8000/v1/models
 
 TTS voice changes too much between runs:
 
-- Lower `TTS_TEMPERATURE`
+- Keep `TTS_TEMPERATURE` around `0.3`
 - Keep `TTS_VOICE` fixed
 - Use a stable `TTS_INSTRUCT`
+
+TTS repeats one character or produces abnormal long audio:
+
+- Avoid setting `TTS_TEMPERATURE` too low
+- Increase `TTS_REPETITION_PENALTY`
+- Keep `TTS_MAX_AUDIO_SECONDS` enabled
 
 Streaming playback is choppy:
 
@@ -317,6 +328,8 @@ Streaming playback is choppy:
 Streaming TTS hangs:
 
 - Keep `TTS_STREAM_TIMEOUT_SECONDS` enabled
+- Increase `TTS_MAX_AUDIO_SECONDS` if long answers are cut off around a fixed audio length
+- Increase `TTS_STREAM_DRAIN_TIMEOUT_SECONDS` if generated audio is complete but playback does not have enough time to drain
 - Increase `TTS_STREAMING_INTERVAL`
 - Try a slightly higher `TTS_TEMPERATURE` such as `0.3` if the voice sounds too constrained
 

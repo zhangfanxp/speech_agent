@@ -64,7 +64,15 @@ from config import (
 
     TTS_TEMPERATURE,
 
+    TTS_TOP_K,
+
+    TTS_TOP_P,
+
+    TTS_REPETITION_PENALTY,
+
     TTS_MAX_TOKENS,
+
+    TTS_MAX_AUDIO_SECONDS,
 
     TTS_STREAM,
 
@@ -75,6 +83,8 @@ from config import (
     TTS_STREAM_TIMEOUT_SECONDS,
 
     TTS_STREAM_DRAIN_TIMEOUT_SECONDS,
+
+    TTS_STREAM_DRAIN_TIMEOUT_EXTRA_SECONDS,
 
 
     SAMPLE_RATE,
@@ -396,12 +406,32 @@ asr_model = load_asr_model(
 
 
 
-print("加载 Qwen3-TTS...")
+print(
+
+    "加载 Qwen3-TTS...",
+
+    flush=True
+
+)
+
+
+tts_load_start = now()
 
 
 tts_model = load_tts_model(
 
-    TTS_MODEL
+    TTS_MODEL,
+
+    lazy=True
+
+)
+
+
+log_duration(
+
+    "Qwen3-TTS加载耗时",
+
+    now() - tts_load_start
 
 )
 
@@ -1234,6 +1264,15 @@ def text_to_speech(text):
         temperature=TTS_TEMPERATURE,
 
 
+        top_k=TTS_TOP_K,
+
+
+        top_p=TTS_TOP_P,
+
+
+        repetition_penalty=TTS_REPETITION_PENALTY,
+
+
         max_tokens=TTS_MAX_TOKENS,
 
 
@@ -1359,6 +1398,23 @@ def stream_text_to_speech(text):
     )
 
 
+    print(
+
+        "Sampling:",
+
+        f"temperature={TTS_TEMPERATURE}, "
+
+        f"top_p={TTS_TOP_P}, "
+
+        f"top_k={TTS_TOP_K}, "
+
+        f"repetition_penalty={TTS_REPETITION_PENALTY}, "
+
+        f"max_audio={TTS_MAX_AUDIO_SECONDS}s"
+
+    )
+
+
     stream_start = now()
 
 
@@ -1383,6 +1439,8 @@ def stream_text_to_speech(text):
 
     player.min_buffer_seconds = TTS_STREAM_MIN_BUFFER_SECONDS
 
+    drained = True
+
 
     try:
 
@@ -1400,6 +1458,12 @@ def stream_text_to_speech(text):
             max_tokens=TTS_MAX_TOKENS,
 
             temperature=TTS_TEMPERATURE,
+
+            top_k=TTS_TOP_K,
+
+            top_p=TTS_TOP_P,
+
+            repetition_penalty=TTS_REPETITION_PENALTY,
 
             stream=True,
 
@@ -1433,6 +1497,30 @@ def stream_text_to_speech(text):
 
 
             total_samples += result.samples
+
+
+            generated_audio_seconds = (
+
+                total_samples
+
+                /
+
+                tts_model.sample_rate
+
+            )
+
+
+            if generated_audio_seconds > TTS_MAX_AUDIO_SECONDS:
+
+
+                print(
+
+                    "⚠️ 流式TTS音频过长，可能出现重复生成，结束本轮播放"
+
+                )
+
+
+                break
 
 
             if first_audio_chunk is None:
@@ -1472,33 +1560,95 @@ def stream_text_to_speech(text):
                 )
 
 
-        if play_start is None and player.buffered_samples() > 0:
+        buffered_samples = player.buffered_samples()
+
+
+        if play_start is None and buffered_samples > 0:
 
 
             play_start = now()
 
 
-        drained = player.drain_event.wait(
+        # AudioPlayer 的 drain_event 可能曾因中途缓冲耗尽而被置位。
+        # 如果最终缓冲区里仍有音频，需要重新启动/清理 drain 状态，
+        # 否则可能出现“还有十几秒缓冲音频，但本轮立刻结束”的情况。
+        if buffered_samples > 0:
 
-            timeout=TTS_STREAM_DRAIN_TIMEOUT_SECONDS
+
+            if not player.playing:
+
+
+                player.start_stream()
+
+
+            else:
+
+
+                player.drain_event.clear()
+
+
+        buffered_seconds = (
+
+            buffered_samples
+
+            /
+
+            tts_model.sample_rate
 
         )
 
 
-        if not drained:
+        drain_timeout = max(
+
+            TTS_STREAM_DRAIN_TIMEOUT_SECONDS,
+
+            buffered_seconds + TTS_STREAM_DRAIN_TIMEOUT_EXTRA_SECONDS
+
+        )
 
 
-            print(
+        print(
 
-                "⚠️ 流式音频播放等待超时，强制结束本轮播放"
+            f"流式播放剩余缓冲: {format_seconds(buffered_seconds)}，"
+
+            f"等待播放完成超时: {format_seconds(drain_timeout)}"
+
+        )
+
+
+        if buffered_samples > 0 or player.playing:
+
+
+            drained = player.drain_event.wait(
+
+                timeout=drain_timeout
 
             )
+
+
+            if not drained:
+
+
+                print(
+
+                    "⚠️ 流式音频播放等待超时，强制结束本轮播放"
+
+                )
 
 
     finally:
 
 
-        player.stop()
+        if drained:
+
+
+            player.stop()
+
+
+        else:
+
+
+            player.flush()
 
 
     stream_end = now()
