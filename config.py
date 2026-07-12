@@ -40,6 +40,23 @@ TTS_MODEL = (
 TTS_VOICE = "Vivian"
 
 
+# 是否启用 TTS 流式合成 + 播放
+
+TTS_STREAM = True
+
+
+# 流式 TTS 每次生成的音频块间隔，越小越快开始播放，
+# 但过小可能导致声音不够稳定或播放缓冲不足。
+
+TTS_STREAMING_INTERVAL = 0.5
+
+
+# 播放器启动前预缓冲时长，越小越低延迟，
+# 如果出现卡顿或断续，可以调大到 0.8 或 1.0。
+
+TTS_STREAM_MIN_BUFFER_SECONDS = 0.5
+
+
 
 # =============================
 # Audio
@@ -57,6 +74,6 @@ MIC_DEVICE = 1
 
 # VAD
 
-SILENCE_SECONDS = 0.8
+SILENCE_SECONDS = 0.5
 
 MAX_RECORD_SECONDS = 15

@@ -20,6 +20,8 @@ from mlx_audio.tts.utils import load_model as load_tts_model
 
 from mlx_audio.tts.generate import generate_audio
 
+from mlx_audio.tts.audio_player import AudioPlayer
+
 
 
 from config import (
@@ -35,6 +37,12 @@ from config import (
     TTS_MODEL,
 
     TTS_VOICE,
+
+    TTS_STREAM,
+
+    TTS_STREAMING_INTERVAL,
+
+    TTS_STREAM_MIN_BUFFER_SECONDS,
 
 
     SAMPLE_RATE,
@@ -141,6 +149,15 @@ def print_turn_timing(timing):
     response_latency = timing["play_start"] - timing["record_end"]
 
 
+    is_streaming = timing.get(
+
+        "tts_streaming",
+
+        False
+
+    )
+
+
     print(
 
         "\n⏱ 本轮耗时统计"
@@ -175,22 +192,55 @@ def print_turn_timing(timing):
     )
 
 
-    print(
-
-        "- TTS合成:",
-
-        format_seconds(timing["tts_end"] - timing["llm_end"])
-
-    )
+    if is_streaming:
 
 
-    print(
+        print(
 
-        "- 音频播放:",
+            "- TTS首个音频块:",
 
-        format_seconds(timing["play_end"] - timing["play_start"])
+            format_seconds(timing["first_audio_chunk"] - timing["llm_end"])
 
-    )
+        )
+
+
+        print(
+
+            "- 流式播放启动:",
+
+            format_seconds(timing["play_start"] - timing["llm_end"])
+
+        )
+
+
+        print(
+
+            "- 流式TTS+播放:",
+
+            format_seconds(timing["play_end"] - timing["llm_end"])
+
+        )
+
+
+    else:
+
+
+        print(
+
+            "- TTS合成:",
+
+            format_seconds(timing["tts_end"] - timing["llm_end"])
+
+        )
+
+
+        print(
+
+            "- 音频播放:",
+
+            format_seconds(timing["play_end"] - timing["play_start"])
+
+        )
 
 
     print(
@@ -245,6 +295,30 @@ tts_model = load_tts_model(
     TTS_MODEL
 
 )
+
+
+if TTS_STREAM:
+
+
+    print(
+
+        f"TTS模式: 流式播放 "
+
+        f"(interval={TTS_STREAMING_INTERVAL}s, "
+
+        f"buffer={TTS_STREAM_MIN_BUFFER_SECONDS}s)"
+
+    )
+
+
+else:
+
+
+    print(
+
+        "TTS模式: 生成完整wav后播放"
+
+    )
 
 
 
@@ -871,6 +945,263 @@ def text_to_speech(text):
 
 
 
+def stream_text_to_speech(text):
+
+
+    print(
+
+        "🔊 流式生成并播放语音..."
+
+    )
+
+
+    print(
+
+        "Text:",
+
+        text
+
+    )
+
+
+    print(
+
+        "Voice:",
+
+        TTS_VOICE
+
+    )
+
+
+    print(
+
+        "Streaming interval:",
+
+        f"{TTS_STREAMING_INTERVAL}s"
+
+    )
+
+
+    stream_start = now()
+
+
+    first_audio_chunk = None
+
+
+    play_start = None
+
+
+    chunk_count = 0
+
+
+    total_samples = 0
+
+
+    player = AudioPlayer(
+
+        sample_rate=tts_model.sample_rate
+
+    )
+
+
+    player.min_buffer_seconds = TTS_STREAM_MIN_BUFFER_SECONDS
+
+
+    try:
+
+
+        results = tts_model.generate(
+
+            text=text,
+
+            voice=TTS_VOICE,
+
+            lang_code="zh",
+
+            max_tokens=1200,
+
+            temperature=0.7,
+
+            stream=True,
+
+            streaming_interval=TTS_STREAMING_INTERVAL,
+
+            verbose=False
+
+        )
+
+
+        for result in results:
+
+
+            chunk_count += 1
+
+
+            total_samples += result.samples
+
+
+            if first_audio_chunk is None:
+
+
+                first_audio_chunk = now()
+
+
+                log_duration(
+
+                    "TTS首个音频块耗时",
+
+                    first_audio_chunk - stream_start
+
+                )
+
+
+            player.queue_audio(
+
+                result.audio
+
+            )
+
+
+            if play_start is None and player.playing:
+
+
+                play_start = now()
+
+
+                log_duration(
+
+                    "流式播放启动耗时",
+
+                    play_start - stream_start
+
+                )
+
+
+        if play_start is None and player.buffered_samples() > 0:
+
+
+            play_start = now()
+
+
+        player.wait_for_drain()
+
+
+    finally:
+
+
+        player.stop()
+
+
+    stream_end = now()
+
+
+    if first_audio_chunk is None:
+
+
+        first_audio_chunk = stream_end
+
+
+    if play_start is None:
+
+
+        play_start = stream_end
+
+
+    audio_duration = total_samples / tts_model.sample_rate
+
+
+    print(
+
+        f"流式音频块数量: {chunk_count}"
+
+    )
+
+
+    print(
+
+        f"流式音频总长度: {format_seconds(audio_duration)}"
+
+    )
+
+
+    log_duration(
+
+        "流式TTS+播放总耗时",
+
+        stream_end - stream_start
+
+    )
+
+
+    return {
+
+        "tts_streaming": True,
+
+        "first_audio_chunk": first_audio_chunk,
+
+        "tts_end": stream_end,
+
+        "play_start": play_start,
+
+        "play_end": stream_end
+
+    }
+
+
+
+
+def speak_text(text):
+
+
+    if TTS_STREAM:
+
+
+        return stream_text_to_speech(
+
+            text
+
+        )
+
+
+    audio = text_to_speech(
+
+        text
+
+    )
+
+
+    tts_end = now()
+
+
+    play_start = now()
+
+
+    play_audio(
+
+        audio
+
+    )
+
+
+    play_end = now()
+
+
+    return {
+
+        "tts_streaming": False,
+
+        "tts_end": tts_end,
+
+        "play_start": play_start,
+
+        "play_end": play_end
+
+    }
+
+
+
+
+
 
 # =====================================
 # 播放音频
@@ -1003,27 +1334,18 @@ def main():
 
 
 
-                audio = text_to_speech(
+                speech_timing = speak_text(
 
                     goodbye
 
                 )
 
 
-                timing["tts_end"] = now()
+                timing.update(
 
-
-                timing["play_start"] = now()
-
-
-                play_audio(
-
-                    audio
+                    speech_timing
 
                 )
-
-
-                timing["play_end"] = now()
 
 
                 print_turn_timing(
@@ -1064,27 +1386,18 @@ def main():
             if answer:
 
 
-                audio = text_to_speech(
+                speech_timing = speak_text(
 
                     answer
 
                 )
 
 
-                timing["tts_end"] = now()
+                timing.update(
 
-
-                timing["play_start"] = now()
-
-
-                play_audio(
-
-                    audio
+                    speech_timing
 
                 )
-
-
-                timing["play_end"] = now()
 
 
                 print_turn_timing(
