@@ -3,6 +3,8 @@ import requests
 import subprocess
 import glob
 import os
+import json
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -26,9 +28,25 @@ from mlx_audio.tts.audio_player import AudioPlayer
 
 from config import (
 
-    LLM_API,
+    LLM_PROVIDER,
 
-    LLM_MODEL,
+    LOCAL_LLM_API,
+
+    LOCAL_LLM_MODEL,
+
+    ONLINE_LLM_API,
+
+    ONLINE_LLM_MODEL,
+
+    ONLINE_LLM_API_KEY,
+
+    ONLINE_LLM_STREAM,
+
+    ONLINE_LLM_ENABLE_THINKING,
+
+    LLM_TEMPERATURE,
+
+    LLM_MAX_TOKENS,
 
 
     ASR_MODEL,
@@ -38,11 +56,25 @@ from config import (
 
     TTS_VOICE,
 
+    TTS_AVAILABLE_SPEAKERS,
+
+    TTS_INSTRUCT,
+
+    TTS_LANGUAGE,
+
+    TTS_TEMPERATURE,
+
+    TTS_MAX_TOKENS,
+
     TTS_STREAM,
 
     TTS_STREAMING_INTERVAL,
 
     TTS_STREAM_MIN_BUFFER_SECONDS,
+
+    TTS_STREAM_TIMEOUT_SECONDS,
+
+    TTS_STREAM_DRAIN_TIMEOUT_SECONDS,
 
 
     SAMPLE_RATE,
@@ -65,7 +97,7 @@ from config import (
 # =====================================
 
 
-SYSTEM_PROMPT = """
+DEFAULT_SYSTEM_PROMPT = """
 
 你是一个本地中文语音助手。
 
@@ -80,6 +112,83 @@ SYSTEM_PROMPT = """
 7. 普通回答控制在50字以内。
 
 """
+
+
+def load_system_prompt(path="prompt.json"):
+
+
+    prompt_path = Path(__file__).resolve().parent / path
+
+
+    try:
+
+
+        data = json.loads(
+
+            prompt_path.read_text(
+
+                encoding="utf-8"
+
+            )
+
+        )
+
+
+        prompt = data.get(
+
+            "system_prompt",
+
+            ""
+
+        ).strip()
+
+
+        if prompt:
+
+
+            print(
+
+                f"已加载提示词配置: {prompt_path.name}"
+
+            )
+
+
+            return prompt
+
+
+        print(
+
+            f"提示词配置为空，使用默认提示词: {prompt_path.name}"
+
+        )
+
+
+    except FileNotFoundError:
+
+
+        print(
+
+            f"未找到提示词配置，使用默认提示词: {prompt_path.name}"
+
+        )
+
+
+    except Exception as e:
+
+
+        print(
+
+            "提示词配置读取失败，使用默认提示词:",
+
+            e
+
+        )
+
+
+    return DEFAULT_SYSTEM_PROMPT.strip()
+
+
+SYSTEM_PROMPT = load_system_prompt()
 
 
 
@@ -306,7 +415,9 @@ if TTS_STREAM:
 
         f"(interval={TTS_STREAMING_INTERVAL}s, "
 
-        f"buffer={TTS_STREAM_MIN_BUFFER_SECONDS}s)"
+        f"buffer={TTS_STREAM_MIN_BUFFER_SECONDS}s, "
+
+        f"timeout={TTS_STREAM_TIMEOUT_SECONDS}s)"
 
     )
 
@@ -321,8 +432,61 @@ else:
     )
 
 
+print(
+
+    f"TTS说话人: {TTS_VOICE}"
+
+)
+
+
+speaker_description = TTS_AVAILABLE_SPEAKERS.get(
+
+    TTS_VOICE,
+
+    "未在配置清单中找到该说话人描述"
+
+)
+
+
+print(
+
+    f"TTS说话人描述: {speaker_description}"
+
+)
+
+
+if TTS_INSTRUCT:
+
+
+    print(
+
+        f"TTS风格描述: {TTS_INSTRUCT}"
+
+    )
+
+
 
 print("\n模型加载完成\n")
+
+
+if LLM_PROVIDER == "online":
+
+
+    print(
+
+        f"LLM模式: 线上 ({ONLINE_LLM_MODEL})"
+
+    )
+
+
+else:
+
+
+    print(
+
+        f"LLM模式: 本地 ({LOCAL_LLM_MODEL})"
+
+    )
 
 
 
@@ -662,128 +826,81 @@ def should_exit(text):
 
 
 # =====================================
-# Qwen3 LLM
+# LLM
 # =====================================
 
 
-def chat(text):
+def build_chat_messages(text):
 
 
-    print(
+    return [
 
-        "🧠 AI生成回答..."
+        {
 
-    )
+            "role": "system",
+
+            "content": SYSTEM_PROMPT
+
+        },
+
+        {
+
+            "role": "user",
+
+            "content": text
+
+        }
+
+    ]
 
 
-    llm_start = now()
 
+def chat_local(text):
 
 
     payload = {
 
+        "model": LOCAL_LLM_MODEL,
 
-        "model":
+        "messages": build_chat_messages(
 
-            LLM_MODEL,
+            text
 
+        ),
 
+        "temperature": LLM_TEMPERATURE,
 
-        "messages":
-
-        [
-
-            {
-
-
-                "role":
-
-                    "system",
-
-
-                "content":
-
-                    SYSTEM_PROMPT
-
-
-            },
-
-
-            {
-
-
-                "role":
-
-                    "user",
-
-
-                "content":
-
-                    text
-
-
-            }
-
-        ],
-
-
-
-        "temperature":
-
-            0.6,
-
-
-
-        "max_tokens":
-
-            100,
-
-
+        "max_tokens": LLM_MAX_TOKENS,
 
         # Qwen3关闭thinking
 
-        "chat_template_kwargs":
+        "chat_template_kwargs": {
 
-        {
-
-            "enable_thinking":
-
-                False
+            "enable_thinking": False
 
         }
-
 
     }
 
 
-
-
-
     response = requests.post(
 
-
-        LLM_API,
-
+        LOCAL_LLM_API,
 
         json=payload,
 
-
         timeout=120
 
-
     )
-
 
 
     response.raise_for_status()
 
 
-
     result = response.json()
 
 
-
-    answer = (
+    return (
 
         result
 
@@ -799,6 +916,237 @@ def chat(text):
 
     )
 
+
+
+def collect_online_stream(response):
+
+
+    parts = []
+
+
+    for line in response.iter_lines(
+
+        decode_unicode=True
+
+    ):
+
+
+        if not line:
+
+
+            continue
+
+
+        if line.startswith("data:"):
+
+
+            line = line[len("data:"):].strip()
+
+
+        if line == "[DONE]":
+
+
+            break
+
+
+        try:
+
+
+            event = json.loads(
+
+                line
+
+            )
+
+
+        except json.JSONDecodeError:
+
+
+            continue
+
+
+        choices = event.get(
+
+            "choices",
+
+            []
+
+        )
+
+
+        if not choices:
+
+
+            continue
+
+
+        delta = choices[0].get(
+
+            "delta",
+
+            {}
+
+        )
+
+
+        content = delta.get(
+
+            "content"
+
+        )
+
+
+        if content:
+
+
+            parts.append(
+
+                content
+
+            )
+
+
+    return "".join(
+
+        parts
+
+    ).strip()
+
+
+
+def chat_online(text):
+
+
+    if not ONLINE_LLM_API:
+
+
+        raise RuntimeError(
+
+            "ONLINE_LLM_BASE_URL 未配置"
+
+        )
+
+
+    if not ONLINE_LLM_API_KEY:
+
+
+        raise RuntimeError(
+
+            "DASHSCOPE_API_KEY 未配置"
+
+        )
+
+
+    payload = {
+
+        "model": ONLINE_LLM_MODEL,
+
+        "messages": build_chat_messages(
+
+            text
+
+        ),
+
+        "temperature": LLM_TEMPERATURE,
+
+        "max_tokens": LLM_MAX_TOKENS,
+
+        "stream": ONLINE_LLM_STREAM,
+
+        "enable_thinking": ONLINE_LLM_ENABLE_THINKING
+
+    }
+
+
+    headers = {
+
+        "Authorization": f"Bearer {ONLINE_LLM_API_KEY}",
+
+        "Content-Type": "application/json"
+
+    }
+
+
+    response = requests.post(
+
+        ONLINE_LLM_API,
+
+        headers=headers,
+
+        json=payload,
+
+        stream=ONLINE_LLM_STREAM,
+
+        timeout=120
+
+    )
+
+
+    response.raise_for_status()
+
+
+    if ONLINE_LLM_STREAM:
+
+
+        return collect_online_stream(
+
+            response
+
+        )
+
+
+    result = response.json()
+
+
+    return (
+
+        result
+
+        ["choices"]
+
+        [0]
+
+        ["message"]
+
+        ["content"]
+
+        .strip()
+
+    )
+
+
+
+def chat(text):
+
+
+    print(
+
+        "🧠 AI生成回答..."
+
+    )
+
+
+    llm_start = now()
+
+
+    if LLM_PROVIDER == "online":
+
+
+        answer = chat_online(
+
+            text
+
+        )
+
+
+    else:
+
+
+        answer = chat_local(
+
+            text
+
+        )
 
 
     print(
@@ -817,7 +1165,6 @@ def chat(text):
         now() - llm_start
 
     )
-
 
 
     return answer
@@ -878,7 +1225,16 @@ def text_to_speech(text):
         voice=TTS_VOICE,
 
 
-        lang_code="zh",
+        instruct=TTS_INSTRUCT,
+
+
+        lang_code=TTS_LANGUAGE,
+
+
+        temperature=TTS_TEMPERATURE,
+
+
+        max_tokens=TTS_MAX_TOKENS,
 
 
         file_prefix="output"
@@ -973,11 +1329,32 @@ def stream_text_to_speech(text):
     )
 
 
+    if TTS_INSTRUCT:
+
+
+        print(
+
+            "Instruct:",
+
+            TTS_INSTRUCT
+
+        )
+
+
     print(
 
         "Streaming interval:",
 
         f"{TTS_STREAMING_INTERVAL}s"
+
+    )
+
+
+    print(
+
+        "Stream timeout:",
+
+        f"{TTS_STREAM_TIMEOUT_SECONDS}s"
 
     )
 
@@ -1016,11 +1393,13 @@ def stream_text_to_speech(text):
 
             voice=TTS_VOICE,
 
-            lang_code="zh",
+            instruct=TTS_INSTRUCT,
 
-            max_tokens=1200,
+            lang_code=TTS_LANGUAGE,
 
-            temperature=0.7,
+            max_tokens=TTS_MAX_TOKENS,
+
+            temperature=TTS_TEMPERATURE,
 
             stream=True,
 
@@ -1032,6 +1411,22 @@ def stream_text_to_speech(text):
 
 
         for result in results:
+
+
+            elapsed = now() - stream_start
+
+
+            if elapsed > TTS_STREAM_TIMEOUT_SECONDS:
+
+
+                print(
+
+                    "⚠️ 流式TTS生成超时，结束本轮播放"
+
+                )
+
+
+                break
 
 
             chunk_count += 1
@@ -1083,7 +1478,21 @@ def stream_text_to_speech(text):
             play_start = now()
 
 
-        player.wait_for_drain()
+        drained = player.drain_event.wait(
+
+            timeout=TTS_STREAM_DRAIN_TIMEOUT_SECONDS
+
+        )
+
+
+        if not drained:
+
+
+            print(
+
+                "⚠️ 流式音频播放等待超时，强制结束本轮播放"
+
+            )
 
 
     finally:
